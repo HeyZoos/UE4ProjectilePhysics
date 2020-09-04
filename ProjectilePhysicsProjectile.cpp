@@ -6,6 +6,8 @@
 
 AProjectilePhysicsProjectile::AProjectilePhysicsProjectile() 
 {
+	this->PrimaryActorTick.bCanEverTick = true;
+
 	// Use a sphere as a simple collision representation
 	CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("SphereComp"));
 	CollisionComp->InitSphereRadius(5.0f);
@@ -22,42 +24,77 @@ AProjectilePhysicsProjectile::AProjectilePhysicsProjectile()
 	// Use a ProjectileMovementComponent to govern this projectile's movement
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileComp"));
 	ProjectileMovement->UpdatedComponent = CollisionComp;
-	ProjectileMovement->InitialSpeed = 3000.f;
-	ProjectileMovement->MaxSpeed = 3000.f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->bShouldBounce = true;
 
-	// Die after 3 seconds by default
-	InitialLifeSpan = 3.0f;
-
-	CollisionComp->SetGenerateOverlapEvents(true);
-	CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &AProjectilePhysicsProjectile::OnBeginOverlap);
+	ProjectileMovement->OnProjectileBounce.AddDynamic(this, &AProjectilePhysicsProjectile::OnProjectileBounce);
+	ProjectileMovement->InitialSpeed = 90000.f;  // NOTE(Jesse) The slowest bullets can travel 180 meters per second irl.
+	ProjectileMovement->MaxSpeed = ProjectileMovement->InitialSpeed;
 }
 
 void AProjectilePhysicsProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
 }
 
-void AProjectilePhysicsProjectile::OnBeginOverlap(
-	UPrimitiveComponent* OverlappedComponent,
-	AActor* OtherActor,
-	UPrimitiveComponent* OtherComp,
-	int32 OtherBodyIndex,
-	bool bFromSweep,
-	const FHitResult& SweepResult
-) {
-	GEngine->AddOnScreenDebugMessage(-1, 10.0, FColor::Green, TEXT("Hello"));
-	auto PenetrationResult = this->ComputeWallBangExitLocation(SweepResult, this->GetActorForwardVector());
+void AProjectilePhysicsProjectile::Tick(float DeltaSeconds)
+{
+	if (this->LastLocation.IsZero())
+	{
+		this->LastLocation = this->GetActorLocation();
+	}
+
+	DrawDebugLine(
+		this->GetWorld(),
+		this->LastLocation,
+		this->GetActorLocation(),
+		FColor::Cyan,
+		true,
+		100.0
+	);
+
+	this->LastLocation = GetActorLocation();
+}
+
+void AProjectilePhysicsProjectile::OnProjectileBounce(const FHitResult& ImpactResult, const FVector& ImpactVelocity)
+{
+	if (ImpactVelocity.Size() < 16000) {
+		return;
+	}
+
+	auto PenetrationResult = this->ComputeWallBangExitLocation(ImpactResult, this->GetActorForwardVector());
 
 	if (PenetrationResult.has_value())
 	{
-		this->GetWorld()->SpawnActor<AProjectilePhysicsProjectile>(
+		AProjectilePhysicsProjectile* NewProjectile = this->GetWorld()->SpawnActor<AProjectilePhysicsProjectile>(
 			/* Location */ PenetrationResult.value(),
 			/* Rotation */ this->GetActorRotation()
 		);
 
+		NewProjectile->ProjectileMovement->Velocity = CalculateVelocityAfterPenetratingObject(
+			ImpactResult.Location,
+			PenetrationResult.value(),
+			ImpactVelocity,
+			0.08
+		);
+
+		if (ImpactVelocity.Size() < 5000.0) {
+			NewProjectile->Destroy();
+		}
+ 
 		this->Destroy();
 	}
+}
+
+float AProjectilePhysicsProjectile::CalculateVelocityAfterPenetratingObject(
+	FVector EntryLocation, 
+	FVector ExitLocation, 
+	FVector InitialVelocity, 
+	float Mass
+) {
+	auto JoulesPerCm = 30000.0;
+	auto InitialProjectileEnergy = 0.5 * Mass * InitialVelocity.SizeSquared();
+	auto ProjectileEnergyAfterPenetration = InitialProjectileEnergy - (ExitLocation - EntryLocation).Size() * JoulesPerCm;
+	return UKismetMathLibrary::Sqrt(ProjectileEnergyAfterPenetration / 0.5 * Mass);
 }
 
 std::optional<FVector> AProjectilePhysicsProjectile::ComputeWallBangExitLocation(

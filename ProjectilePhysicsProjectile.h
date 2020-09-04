@@ -4,9 +4,11 @@
 
 #include <optional>
 
+#include "DrawDebugHelpers.h"
 #include "Engine.h"
 #include "Engine/EngineTypes.h"
 #include "Engine/World.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 #include "CoreMinimal.h"
@@ -41,6 +43,13 @@ public:
 	/// <summary>
 	/// 
 	/// </summary>
+	void Tick(float DeltaSeconds) override;
+
+	FVector LastLocation;
+
+	/// <summary>
+	/// 
+	/// </summary>
 	/// <param name="WorldContextObject"></param>
 	/// <param name="HitResult"></param>
 	/// <param name="ImpactVelocity"></param>
@@ -52,13 +61,19 @@ public:
 		float PenetrationDepth = 500.0f
 	);
 
-	void OnBeginOverlap(
-		UPrimitiveComponent* OverlappedComponent,
-		AActor* OtherActor,
-		UPrimitiveComponent* OtherComp,
-		int32 OtherBodyIndex,
-		bool bFromSweep,
-		const FHitResult& SweepResult
+	/// <summary>
+	/// 
+	/// </summary>
+	/// <param name="ImpactResult"></param>
+	/// <param name="ImpactVelocity"></param>
+	UFUNCTION()
+	void OnProjectileBounce(const FHitResult& ImpactResult, const FVector& ImpactVelocity);
+
+	float CalculateVelocityAfterPenetratingObject(
+		FVector EntryLocation,
+		FVector ExitLocation,
+		FVector InitialVelocity,
+		float Mass
 	);
 };
 
