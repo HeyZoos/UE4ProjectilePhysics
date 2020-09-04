@@ -70,12 +70,12 @@ void AProjectilePhysicsProjectile::OnProjectileBounce(const FHitResult& ImpactRe
 			/* Rotation */ this->GetActorRotation()
 		);
 
-		NewProjectile->ProjectileMovement->Velocity = CalculateVelocityAfterPenetratingObject(
+		NewProjectile->ProjectileMovement->Velocity *= CalculateVelocityAfterPenetratingObject(
 			ImpactResult.Location,
 			PenetrationResult.value(),
 			ImpactVelocity,
 			0.08
-		);
+		) / NewProjectile->ProjectileMovement->Velocity.Size();
 
 		if (ImpactVelocity.Size() < 5000.0) {
 			NewProjectile->Destroy();
